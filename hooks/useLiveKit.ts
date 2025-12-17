@@ -16,7 +16,12 @@ interface UseLiveKitProps {
   onDisconnected?: () => void;
 }
 
-export function useLiveKit({ url, token, enabled = true, onDisconnected }: UseLiveKitProps) {
+export function useLiveKit({
+  url,
+  token,
+  enabled = true,
+  onDisconnected,
+}: UseLiveKitProps) {
   const [room, setRoom] = useState<Room | null>(null);
   const [participants, setParticipants] = useState<RemoteParticipant[]>([]);
   const [localParticipant, setLocalParticipant] =
@@ -30,7 +35,7 @@ export function useLiveKit({ url, token, enabled = true, onDisconnected }: UseLi
   const isConnectingRef = useRef(false);
   const onDisconnectedRef = useRef(onDisconnected);
   const hasConnectedRef = useRef(false);
-  
+
   // Update ref when callback changes
   useEffect(() => {
     onDisconnectedRef.current = onDisconnected;
@@ -38,13 +43,19 @@ export function useLiveKit({ url, token, enabled = true, onDisconnected }: UseLi
 
   useEffect(() => {
     // Don't connect if disabled, no credentials, already connecting, or already connected
-    if (!enabled || !url || !token || isConnectingRef.current || hasConnectedRef.current) {
+    if (
+      !enabled ||
+      !url ||
+      !token ||
+      isConnectingRef.current ||
+      hasConnectedRef.current
+    ) {
       return;
     }
 
     let mounted = true;
     isConnectingRef.current = true;
-    
+
     const lkRoom = new Room({
       adaptiveStream: true,
       dynacast: true,
@@ -60,9 +71,9 @@ export function useLiveKit({ url, token, enabled = true, onDisconnected }: UseLi
     const connectRoom = async () => {
       setIsConnecting(true);
       setError(null);
-      
+
       try {
-        console.log('Connecting to LiveKit room...');
+        console.log("Connecting to LiveKit room...");
         await lkRoom.connect(url, token);
 
         if (!mounted) {
@@ -71,22 +82,22 @@ export function useLiveKit({ url, token, enabled = true, onDisconnected }: UseLi
           return;
         }
 
-        console.log('Connected successfully!');
+        console.log("Connected successfully!");
         hasConnectedRef.current = true;
         setRoom(lkRoom);
         setLocalParticipant(lkRoom.localParticipant);
         setParticipants(Array.from(lkRoom.remoteParticipants.values()));
-        
+
         // Enable camera and microphone
         try {
           await lkRoom.localParticipant.enableCameraAndMicrophone();
-          console.log('Camera and microphone enabled');
+          console.log("Camera and microphone enabled");
           setIsMuted(false);
           setIsVideoOff(false);
         } catch (err) {
-          console.error('Failed to enable camera/microphone:', err);
+          console.error("Failed to enable camera/microphone:", err);
         }
-        
+
         setIsConnecting(false);
 
         // Event handlers
@@ -107,7 +118,7 @@ export function useLiveKit({ url, token, enabled = true, onDisconnected }: UseLi
         });
 
         lkRoom.on(RoomEvent.Disconnected, () => {
-          console.log('Disconnected from LiveKit room');
+          console.log("Disconnected from LiveKit room");
           isConnectingRef.current = false;
           hasConnectedRef.current = false;
           if (onDisconnectedRef.current) {
@@ -119,7 +130,7 @@ export function useLiveKit({ url, token, enabled = true, onDisconnected }: UseLi
           setLocalParticipant(lkRoom.localParticipant);
         });
       } catch (err) {
-        console.error('Failed to connect to LiveKit:', err);
+        console.error("Failed to connect to LiveKit:", err);
         setError(err as Error);
         setIsConnecting(false);
         isConnectingRef.current = false;

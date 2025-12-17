@@ -76,7 +76,7 @@ export default function RoomPage({
 
     try {
       console.log(`Requesting token for room: ${roomId}`);
-      
+
       // Get LiveKit token from backend
       const response = await fetch(`${SOCKET_URL}/token`, {
         method: "POST",
@@ -91,20 +91,20 @@ export default function RoomPage({
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Token request failed:', errorText);
+        console.error("Token request failed:", errorText);
         throw new Error("Failed to get token");
       }
 
       const data = await response.json();
-      console.log('✅ Received token from backend');
+      console.log("✅ Received token from backend");
       console.log(`Token (first 50 chars): ${data.token?.substring(0, 50)}...`);
       console.log(`LiveKit URL: ${LIVEKIT_URL}`);
-      
+
       // Connect to socket for chat first
       socketRef.current = io(SOCKET_URL);
       setSocket(socketRef.current);
       socketRef.current.emit("join-room", { roomId, userName: name });
-      
+
       // Then set token and enable LiveKit connection
       setToken(data.token);
       setShouldConnect(true);
