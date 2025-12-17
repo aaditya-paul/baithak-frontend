@@ -9,6 +9,7 @@ import {
   ChevronDown,
   Flame,
   User,
+  Volume2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
@@ -34,6 +35,7 @@ export function SetupScreen({ onJoin }: SetupScreenProps) {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedAudio, setSelectedAudio] = useState("");
   const [selectedVideo, setSelectedVideo] = useState("");
+  const [selectedOutput, setSelectedOutput] = useState("");
 
   // Request permissions first, then enumerate devices
   useEffect(() => {
@@ -51,8 +53,10 @@ export function SetupScreen({ onJoin }: SetupScreenProps) {
 
         const audio = deviceList.find((d) => d.kind === "audioinput");
         const video = deviceList.find((d) => d.kind === "videoinput");
+        const output = deviceList.find((d) => d.kind === "audiooutput");
         if (audio) setSelectedAudio(audio.deviceId);
         if (video) setSelectedVideo(video.deviceId);
+        if (output) setSelectedOutput(output.deviceId);
 
         // Use the temp stream as our initial stream
         setStream(tempStream);
@@ -317,6 +321,34 @@ export function SetupScreen({ onJoin }: SetupScreenProps) {
                   .map((d) => (
                     <option key={d.deviceId} value={d.deviceId}>
                       {d.label || `Camera ${d.deviceId.slice(0, 5)}`}
+                    </option>
+                  ))}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.65 }}
+            className="space-y-1.5"
+          >
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+              <Volume2 className="w-3.5 h-3.5" />
+              Speaker
+            </label>
+            <div className="relative">
+              <select
+                value={selectedOutput}
+                onChange={(e) => setSelectedOutput(e.target.value)}
+                className="w-full p-3 pr-10 rounded-lg bg-card border border-border text-foreground text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+              >
+                {devices
+                  .filter((d) => d.kind === "audiooutput")
+                  .map((d) => (
+                    <option key={d.deviceId} value={d.deviceId}>
+                      {d.label || `Speaker ${d.deviceId.slice(0, 5)}`}
                     </option>
                   ))}
               </select>
