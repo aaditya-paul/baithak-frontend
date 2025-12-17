@@ -12,6 +12,7 @@ import {
   Flame,
   X,
   Loader2,
+  Settings,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
@@ -19,7 +20,8 @@ import { cn } from "@/lib/utils";
 import { SetupScreen } from "@/components/SetupScreen";
 import { ChatSidebar } from "@/components/ChatSidebar";
 import { VideoLayout } from "@/components/VideoLayout";
-import { useLiveKit } from "@/hooks/useLiveKit";
+import { DeviceSettings } from "@/components/DeviceSettings";
+import { useLiveKit, DeviceSelections } from "@/hooks/useLiveKit";
 
 const SOCKET_URL = "http://localhost:5000";
 const LIVEKIT_URL =
@@ -44,6 +46,8 @@ export default function RoomPage({
   const [pinnedParticipant, setPinnedParticipant] = useState<string>("");
   const [initialMuted, setInitialMuted] = useState(false);
   const [initialVideoOff, setInitialVideoOff] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [initialDevices, setInitialDevices] = useState<DeviceSelections>({});
 
   const {
     room,
@@ -66,6 +70,7 @@ export default function RoomPage({
     onDisconnected: () => router.push("/"),
     initialMuted,
     initialVideoOff,
+    initialDevices,
   });
 
   useEffect(() => {
@@ -79,11 +84,13 @@ export default function RoomPage({
     localStream: MediaStream,
     name: string,
     isMutedFromSetup: boolean,
-    isVideoOffFromSetup: boolean
+    isVideoOffFromSetup: boolean,
+    devicesFromSetup: DeviceSelections
   ) => {
     setUserName(name);
     setInitialMuted(isMutedFromSetup);
     setInitialVideoOff(isVideoOffFromSetup);
+    setInitialDevices(devicesFromSetup);
 
     try {
       console.log(`Requesting token for room: ${roomId}`);
@@ -257,6 +264,18 @@ export default function RoomPage({
           </button>
           <div className="w-px h-5 bg-border" />
           <button
+            onClick={() => setIsSettingsOpen(true)}
+            className={cn(
+              "p-2.5 rounded-full transition-all",
+              isSettingsOpen
+                ? "bg-primary text-white"
+                : "bg-secondary text-foreground hover:bg-muted"
+            )}
+            title="Device Settings"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+          <button
             onClick={() => setIsChatOpen(!isChatOpen)}
             className={cn(
               "p-2.5 rounded-full transition-all",
@@ -268,6 +287,14 @@ export default function RoomPage({
             <MessageSquare className="w-4 h-4" />
           </button>
         </motion.div>
+
+        {/* Device Settings Modal */}
+        <DeviceSettings
+          room={room}
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          currentDevices={initialDevices}
+        />
       </div>
 
       {/* Right Sidebar Chat */}

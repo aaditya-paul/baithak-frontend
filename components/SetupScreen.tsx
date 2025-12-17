@@ -14,12 +14,19 @@ import {
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 
+interface DeviceSelections {
+  audioInput: string;
+  videoInput: string;
+  audioOutput: string;
+}
+
 interface SetupScreenProps {
   onJoin: (
     stream: MediaStream,
     userName: string,
     isMuted: boolean,
-    isVideoOff: boolean
+    isVideoOff: boolean,
+    devices: DeviceSelections
   ) => void;
 }
 
@@ -127,7 +134,11 @@ export function SetupScreen({ onJoin }: SetupScreenProps) {
 
   const handleJoinClick = () => {
     if (stream && userName.trim()) {
-      onJoin(stream, userName.trim(), isMuted, isVideoOff);
+      onJoin(stream, userName.trim(), isMuted, isVideoOff, {
+        audioInput: selectedAudio,
+        videoInput: selectedVideo,
+        audioOutput: selectedOutput,
+      });
     }
   };
 

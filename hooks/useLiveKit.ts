@@ -9,6 +9,12 @@ import {
 
 export type ViewMode = "grid" | "speaker" | "sidebar";
 
+export interface DeviceSelections {
+  audioInput?: string;
+  videoInput?: string;
+  audioOutput?: string;
+}
+
 interface UseLiveKitProps {
   url: string;
   token: string;
@@ -16,6 +22,7 @@ interface UseLiveKitProps {
   onDisconnected?: () => void;
   initialMuted?: boolean;
   initialVideoOff?: boolean;
+  initialDevices?: DeviceSelections;
 }
 
 export function useLiveKit({
@@ -25,6 +32,7 @@ export function useLiveKit({
   onDisconnected,
   initialMuted = false,
   initialVideoOff = false,
+  initialDevices,
 }: UseLiveKitProps) {
   const [room, setRoom] = useState<Room | null>(null);
   const [participants, setParticipants] = useState<RemoteParticipant[]>([]);
@@ -92,25 +100,37 @@ export function useLiveKit({
         setLocalParticipant(lkRoom.localParticipant);
         setParticipants(Array.from(lkRoom.remoteParticipants.values()));
 
-        // Enable camera and microphone based on initial state from setup screen
+        // Enable camera and microphone with selected devices from setup screen
         try {
-          await lkRoom.localParticipant.enableCameraAndMicrophone();
-          console.log("Camera and microphone enabled");
-
-          // Apply initial mute/video state from setup screen
-          if (initialMuted) {
-            await lkRoom.localParticipant.setMicrophoneEnabled(false);
-            setIsMuted(true);
-          } else {
+          // Set microphone with specific device if provided
+          if (!initialMuted) {
+            await lkRoom.localParticipant.setMicrophoneEnabled(true, {
+              deviceId: initialDevices?.audioInput,
+            });
             setIsMuted(false);
+          } else {
+            setIsMuted(true);
           }
 
-          if (initialVideoOff) {
-            await lkRoom.localParticipant.setCameraEnabled(false);
-            setIsVideoOff(true);
-          } else {
+          // Set camera with specific device if provided
+          if (!initialVideoOff) {
+            await lkRoom.localParticipant.setCameraEnabled(true, {
+              deviceId: initialDevices?.videoInput,
+            });
             setIsVideoOff(false);
+          } else {
+            setIsVideoOff(true);
           }
+
+          // Set audio output device if provided
+          if (initialDevices?.audioOutput) {
+            await lkRoom.switchActiveDevice(
+              "audiooutput",
+              initialDevices.audioOutput
+            );
+          }
+
+          console.log("Camera and microphone enabled with selected devices");
         } catch (err) {
           console.error("Failed to enable camera/microphone:", err);
         }
