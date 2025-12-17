@@ -1,8 +1,13 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
-import { Participant, Track, TrackPublication } from "livekit-client";
-import { Mic, MicOff, Pin } from "lucide-react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
+import {
+  Participant,
+  Track,
+  TrackPublication,
+  ParticipantEvent,
+} from "livekit-client";
+import { Mic, MicOff, Pin, VideoOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 
@@ -26,11 +31,20 @@ export const VideoTile = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [hasVideo, setHasVideo] = useState(false);
+  const [isCameraEnabled, setIsCameraEnabled] = useState(
+    participant.isCameraEnabled
+  );
+
+  // Update camera enabled state when it changes
+  const updateCameraState = useCallback(() => {
+    setIsCameraEnabled(participant.isCameraEnabled);
+  }, [participant]);
 
   useEffect(() => {
     const handleTrackSubscribed = (track: Track) => {
       if (track.kind === Track.Kind.Video) {
         setHasVideo(true);
+        updateCameraState();
         if (videoRef.current) {
           track.attach(videoRef.current);
         }
@@ -54,7 +68,27 @@ export const VideoTile = ({
       if (publication.track) {
         handleTrackSubscribed(publication.track);
       }
+      updateCameraState();
     };
+
+    const handleTrackUnpublished = () => {
+      updateCameraState();
+    };
+
+    const handleTrackMuted = (publication: TrackPublication) => {
+      if (publication.source === Track.Source.Camera) {
+        updateCameraState();
+      }
+    };
+
+    const handleTrackUnmuted = (publication: TrackPublication) => {
+      if (publication.source === Track.Source.Camera) {
+        updateCameraState();
+      }
+    };
+
+    // Check initial camera state
+    updateCameraState();
 
     // Attach existing tracks
     participant.trackPublications.forEach((publication: TrackPublication) => {
@@ -63,15 +97,21 @@ export const VideoTile = ({
       }
     });
 
-    // Listen for new tracks
+    // Listen for track events
     participant.on("trackSubscribed", handleTrackSubscribed);
     participant.on("trackUnsubscribed", handleTrackUnsubscribed);
     participant.on("trackPublished", handleTrackPublished);
+    participant.on("trackUnpublished", handleTrackUnpublished);
+    participant.on("trackMuted", handleTrackMuted);
+    participant.on("trackUnmuted", handleTrackUnmuted);
 
     return () => {
       participant.off("trackSubscribed", handleTrackSubscribed);
       participant.off("trackUnsubscribed", handleTrackUnsubscribed);
       participant.off("trackPublished", handleTrackPublished);
+      participant.off("trackUnpublished", handleTrackUnpublished);
+      participant.off("trackMuted", handleTrackMuted);
+      participant.off("trackUnmuted", handleTrackUnmuted);
 
       // Detach all tracks
       participant.trackPublications.forEach((publication: TrackPublication) => {
@@ -80,10 +120,13 @@ export const VideoTile = ({
         }
       });
     };
-  }, [participant, isLocal]);
+  }, [participant, isLocal, updateCameraState]);
 
   const displayName = participant.name || participant.identity;
   const isMuted = !participant.isMicrophoneEnabled;
+
+  // Show avatar when camera is disabled OR when there's no video track
+  const showAvatar = !isCameraEnabled || !hasVideo;
 
   return (
     <motion.div
@@ -106,24 +149,80 @@ export const VideoTile = ({
         autoPlay
         playsInline
         muted={isLocal}
-        className={cn("w-full h-full object-cover", !hasVideo && "hidden")}
+        className={cn("w-full h-full object-cover", showAvatar && "hidden")}
       />
 
       {/* Audio Element (for remote participants) */}
       {!isLocal && <audio ref={audioRef} autoPlay />}
 
-      {/* Video Off Placeholder */}
-      {!hasVideo && (
+      {/* Video Off Placeholder - Avatar */}
+      {showAvatar && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950">
-          <div className="w-24 h-24 rounded-full bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center mb-4 backdrop-blur-sm border border-primary/20">
-            <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center">
-              <span className="text-3xl font-bold text-primary">
-                {displayName.charAt(0).toUpperCase()}
-              </span>
-            </div>
+          {/* Animated background elements */}
+          <div className="absolute inset-0 overflow-hidden">
+            <motion.div
+              animate={{
+                scale: [1, 1.2, 1],
+                opacity: [0.1, 0.15, 0.1],
+              }}
+              transition={{
+                duration: 4,
+                repeat: Infinity,
+                ease: "easeInOut",
+              }}
+              className="absolute -top-1/4 -right-1/4 w-1/2 h-1/2 bg-primary/20 rounded-full blur-3xl"
+            />
+            <motion.div
+              animate={{
+                scale: [1, 1.15, 1],
+                opacity: [0.1, 0.12, 0.1],
+              }}
+              transition={{
+                duration: 5,
+                repeat: Infinity,
+                ease: "easeInOut",
+                delay: 1,
+              }}
+              className="absolute -bottom-1/4 -left-1/4 w-1/2 h-1/2 bg-secondary/20 rounded-full blur-3xl"
+            />
           </div>
-          <p className="text-lg font-semibold text-white mb-1">{displayName}</p>
-          <p className="text-xs text-muted-foreground">Camera off</p>
+
+          {/* Avatar circle */}
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.3 }}
+            className="relative"
+          >
+            <div className="w-24 h-24 rounded-full bg-gradient-to-br from-primary/40 to-primary/20 flex items-center justify-center backdrop-blur-sm border-2 border-primary/30 shadow-xl shadow-primary/20">
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center">
+                <span className="text-4xl font-bold text-primary drop-shadow-lg">
+                  {displayName.charAt(0).toUpperCase()}
+                </span>
+              </div>
+            </div>
+            {/* Camera off indicator */}
+            <div className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-slate-800 border-2 border-slate-700 flex items-center justify-center">
+              <VideoOff className="w-4 h-4 text-muted-foreground" />
+            </div>
+          </motion.div>
+
+          <motion.p
+            initial={{ y: 10, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.1 }}
+            className="text-lg font-semibold text-white mt-4"
+          >
+            {displayName}
+          </motion.p>
+          <motion.p
+            initial={{ y: 10, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.15 }}
+            className="text-xs text-muted-foreground"
+          >
+            Camera off
+          </motion.p>
         </div>
       )}
 
