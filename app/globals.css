@@ -1,26 +1,88 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Baithak Core Color Scheme - Warm Dark Theme */
+  --background: #0F0F14; /* Dark warm charcoal */
+  --foreground: #F9FAFB; /* Main text */
+
+  --card: #1C1C28; /* Cards / video tiles */
+  --card-foreground: #F9FAFB;
+
+  --popover: #15151F; /* Panels / drawers */
+  --popover-foreground: #F9FAFB;
+
+  --primary: #EF4444; /* Deep warm red */
+  --primary-foreground: #FFFFFF;
+
+  --secondary: #F59E0B; /* Muted amber / chai tone */
+  --secondary-foreground: #0F0F14;
+
+  --muted: #1C1C28;
+  --muted-foreground: #9CA3AF; /* Muted text / timestamps */
+
+  --accent: #D97706; /* Amber hover */
+  --accent-foreground: #F9FAFB;
+
+  --destructive: #DC2626;
+  --destructive-foreground: #FFFFFF;
+
+  --border: rgba(255, 255, 255, 0.1); /* Soft barely-there lines */
+  --input: #15151F;
+  --ring: #EF4444;
+
+  --secondary-text: #D1D5DB; /* Secondary text */
+
+  --radius: 0.75rem;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Custom Scrollbar for organic feel */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--muted);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
 }
