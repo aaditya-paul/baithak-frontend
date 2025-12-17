@@ -299,25 +299,36 @@ export default function RoomPage({
 
       {/* Right Sidebar Chat */}
       {isChatOpen && (
-        <motion.div
-          initial={{ x: 320 }}
-          animate={{ x: 0 }}
-          exit={{ x: 320 }}
-          transition={{ type: "spring", damping: 25, stiffness: 300 }}
-          className="w-80 h-full bg-card border-l border-border z-30 flex flex-col flex-shrink-0"
-        >
-          <div className="p-3 border-b border-border flex items-center justify-between">
-            <h2 className="font-semibold text-sm">Chat</h2>
-            <button
-              onClick={() => setIsChatOpen(false)}
-              className="p-1 rounded-md hover:bg-muted transition-colors"
-              aria-label="Close chat"
-            >
-              <X className="w-4 h-4 text-muted-foreground" />
-            </button>
-          </div>
-          <ChatSidebar socket={socket} roomId={roomId} isOpen={isChatOpen} />
-        </motion.div>
+        <>
+          {/* Mobile backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsChatOpen(false)}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-30 md:hidden"
+          />
+
+          <motion.div
+            initial={{ x: "100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "100%" }}
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            className="fixed md:relative inset-y-0 right-0 w-full sm:w-80 md:w-80 h-full bg-card border-l border-border z-40 md:z-30 flex flex-col flex-shrink-0"
+          >
+            <div className="p-3 border-b border-border flex items-center justify-between">
+              <h2 className="font-semibold text-sm">Chat</h2>
+              <button
+                onClick={() => setIsChatOpen(false)}
+                className="p-1 rounded-md hover:bg-muted transition-colors"
+                aria-label="Close chat"
+              >
+                <X className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </div>
+            <ChatSidebar socket={socket} roomId={roomId} isOpen={isChatOpen} />
+          </motion.div>
+        </>
       )}
     </div>
   );
