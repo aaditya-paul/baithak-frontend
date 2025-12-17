@@ -2,7 +2,6 @@
 
 import { use, useEffect, useRef, useState } from "react";
 import io, { Socket } from "socket.io-client";
-import Peer from "simple-peer";
 import {
   Mic,
   MicOff,
@@ -12,21 +11,19 @@ import {
   MessageSquare,
   Flame,
   X,
+  Loader2,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { SetupScreen } from "@/components/SetupScreen";
 import { ChatSidebar } from "@/components/ChatSidebar";
-import { PeerVideo } from "@/components/PeerVideo";
+import { VideoLayout } from "@/components/VideoLayout";
+import { useLiveKit } from "@/hooks/useLiveKit";
 
 const SOCKET_URL = "http://localhost:5000";
-
-interface PeerObj {
-  peerId: string;
-  peerName: string;
-  peer: Peer.Instance;
-}
+const LIVEKIT_URL =
+  process.env.NEXT_PUBLIC_LIVEKIT_URL || "ws://localhost:7880";
 
 export default function RoomPage({
   params,
@@ -39,169 +36,92 @@ export default function RoomPage({
 
   const [joined, setJoined] = useState(false);
   const [userName, setUserName] = useState("");
-  const [stream, setStream] = useState<MediaStream | null>(null);
-  const [peers, setPeers] = useState<PeerObj[]>([]);
+  const [token, setToken] = useState("");
+  const [shouldConnect, setShouldConnect] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const [socket, setSocket] = useState<Socket | null>(null);
-  const peersRef = useRef<PeerObj[]>([]);
   const [isChatOpen, setIsChatOpen] = useState(true);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isVideoOff, setIsVideoOff] = useState(false);
+  const [pinnedParticipant, setPinnedParticipant] = useState<string>("");
+
+  const {
+    room,
+    participants,
+    localParticipant,
+    isConnecting,
+    error,
+    isMuted,
+    isVideoOff,
+    viewMode,
+    activeSpeaker,
+    toggleMute,
+    toggleVideo,
+    disconnect,
+    setViewMode,
+  } = useLiveKit({
+    url: LIVEKIT_URL,
+    token,
+    enabled: shouldConnect && !!token,
+    onDisconnected: () => router.push("/"),
+  });
 
   useEffect(() => {
     return () => {
       socketRef.current?.disconnect();
       setSocket(null);
-      stream?.getTracks().forEach((t) => t.stop());
-      peersRef.current.forEach((p) => p.peer.destroy());
     };
-  }, [stream]);
+  }, []);
 
-  const createPeer = (
-    userToSignal: string,
-    callerID: string,
-    stream: MediaStream
-  ): Peer.Instance => {
-    const peer = new Peer({
-      initiator: true,
-      trickle: true, // Faster connections
-      stream,
-      config: {
-        iceServers: [
-          { urls: "stun:stun.l.google.com:19302" },
-          { urls: "stun:stun1.l.google.com:19302" },
-        ],
-      },
-    });
-
-    peer.on("signal", (signal: Peer.SignalData) => {
-      socketRef.current?.emit("signal", { userToSignal, callerID, signal });
-    });
-
-    peer.on("error", (err: any) => {
-      console.error("Peer error:", err);
-    });
-
-    return peer;
-  };
-
-  const addPeer = (
-    incomingSignal: Peer.SignalData,
-    callerID: string,
-    stream: MediaStream
-  ): Peer.Instance => {
-    const peer = new Peer({
-      initiator: false,
-      trickle: true,
-      stream,
-      config: {
-        iceServers: [
-          { urls: "stun:stun.l.google.com:19302" },
-          { urls: "stun:stun1.l.google.com:19302" },
-        ],
-      },
-    });
-
-    peer.on("signal", (signal: Peer.SignalData) => {
-      socketRef.current?.emit("returning-signal", { signal, callerID });
-    });
-
-    peer.on("error", (err: any) => {
-      console.error("Peer error:", err);
-    });
-
-    peer.signal(incomingSignal);
-    return peer;
-  };
-
-  const joinRoom = (localStream: MediaStream, name: string) => {
-    setStream(localStream);
+  const joinRoom = async (localStream: MediaStream, name: string) => {
     setUserName(name);
-    setJoined(true);
 
-    socketRef.current = io(SOCKET_URL);
-    setSocket(socketRef.current);
-    socketRef.current.emit("join-room", { roomId, userName: name });
+    try {
+      console.log(`Requesting token for room: ${roomId}`);
+      
+      // Get LiveKit token from backend
+      const response = await fetch(`${SOCKET_URL}/token`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          roomName: roomId,
+          participantName: name,
+        }),
+      });
 
-    // Existing users in room
-    socketRef.current.on(
-      "all-users",
-      (users: { id: string; name: string }[]) => {
-        const peersArr: PeerObj[] = [];
-        users.forEach((user) => {
-          const peer = createPeer(
-            user.id,
-            socketRef.current!.id as string,
-            localStream
-          );
-          const peerObj = { peerId: user.id, peerName: user.name, peer };
-          peersRef.current.push(peerObj);
-          peersArr.push(peerObj);
-        });
-        setPeers(peersArr);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Token request failed:', errorText);
+        throw new Error("Failed to get token");
       }
-    );
 
-    // New user joined
-    socketRef.current.on(
-      "user-joined",
-      (payload: {
-        signal: Peer.SignalData;
-        callerID: string;
-        callerName: string;
-      }) => {
-        const peer = addPeer(payload.signal, payload.callerID, localStream);
-        const peerObj = {
-          peerId: payload.callerID,
-          peerName: payload.callerName,
-          peer,
-        };
-        peersRef.current.push(peerObj);
-        setPeers((prev) => [...prev, peerObj]);
-      }
-    );
+      const data = await response.json();
+      console.log('✅ Received token from backend');
+      console.log(`Token (first 50 chars): ${data.token?.substring(0, 50)}...`);
+      console.log(`LiveKit URL: ${LIVEKIT_URL}`);
+      
+      // Connect to socket for chat first
+      socketRef.current = io(SOCKET_URL);
+      setSocket(socketRef.current);
+      socketRef.current.emit("join-room", { roomId, userName: name });
+      
+      // Then set token and enable LiveKit connection
+      setToken(data.token);
+      setShouldConnect(true);
+      setJoined(true);
 
-    // Complete handshake
-    socketRef.current.on(
-      "receiving-returned-signal",
-      (payload: { signal: Peer.SignalData; id: string }) => {
-        const item = peersRef.current.find((p) => p.peerId === payload.id);
-        if (item) {
-          item.peer.signal(payload.signal);
-        }
-      }
-    );
-
-    // User left
-    socketRef.current.on("user-disconnected", (id: string) => {
-      const peerObj = peersRef.current.find((p) => p.peerId === id);
-      if (peerObj) {
-        peerObj.peer.destroy();
-      }
-      peersRef.current = peersRef.current.filter((p) => p.peerId !== id);
-      setPeers(peersRef.current);
-    });
-  };
-
-  const toggleMute = () => {
-    if (stream) {
-      stream.getAudioTracks().forEach((t) => (t.enabled = !t.enabled));
-      setIsMuted(!stream.getAudioTracks()[0]?.enabled);
-    }
-  };
-
-  const toggleVideo = () => {
-    if (stream) {
-      stream.getVideoTracks().forEach((t) => (t.enabled = !t.enabled));
-      setIsVideoOff(!stream.getVideoTracks()[0]?.enabled);
+      // Stop the preview stream as LiveKit will handle it
+      localStream.getTracks().forEach((t) => t.stop());
+    } catch (err) {
+      console.error("Failed to join room:", err);
+      alert("Failed to join room. Please try again.");
     }
   };
 
   const leaveRoom = () => {
     socketRef.current?.disconnect();
     setSocket(null);
-    stream?.getTracks().forEach((t) => t.stop());
-    peersRef.current.forEach((p) => p.peer.destroy());
+    disconnect();
     router.push("/");
   };
 
@@ -209,13 +129,40 @@ export default function RoomPage({
     return <SetupScreen onJoin={joinRoom} />;
   }
 
-  const totalParticipants = peers.length + 1;
-  const gridCols =
-    totalParticipants === 1
-      ? "grid-cols-1 max-w-2xl mx-auto"
-      : totalParticipants <= 4
-      ? "grid-cols-2"
-      : "grid-cols-3";
+  if (isConnecting) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Connecting to room...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-background">
+        <div className="flex flex-col items-center gap-4 max-w-md text-center">
+          <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center">
+            <X className="w-8 h-8 text-destructive" />
+          </div>
+          <h2 className="text-lg font-semibold">Connection Error</h2>
+          <p className="text-sm text-muted-foreground">{error.message}</p>
+          <button
+            onClick={() => router.push("/")}
+            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90"
+          >
+            Go Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!localParticipant) {
+    return null;
+  }
 
   return (
     <div className="flex bg-background h-screen overflow-hidden">
@@ -227,48 +174,32 @@ export default function RoomPage({
             <Flame className="w-5 h-5" />
             <span className="font-semibold">Baithak</span>
           </div>
-          <span className="text-xs bg-secondary-foreground border-secondary border text-secondary px-2 py-1 rounded-full">
-            Room: {roomId}
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-muted-foreground">
+              {participants.length + 1} participant
+              {participants.length !== 0 ? "s" : ""}
+            </span>
+            <span className="text-xs bg-secondary-foreground border-secondary border text-secondary px-2 py-1 rounded-full">
+              Room: {roomId}
+            </span>
+          </div>
         </div>
 
-        {/* Grid */}
-        <div className={cn("grid gap-3 flex-1 content-center", gridCols)}>
-          {/* My Video */}
-          <div className="relative w-full aspect-video bg-card rounded-xl overflow-hidden border border-border">
-            <video
-              ref={(ref) => {
-                if (ref && stream) ref.srcObject = stream;
-              }}
-              muted
-              autoPlay
-              playsInline
-              className={cn(
-                "w-full h-full object-cover",
-                isVideoOff && "hidden"
-              )}
-            />
-            {isVideoOff && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-muted to-muted/80">
-                <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center mb-3">
-                  <Flame className="w-10 h-10 text-primary" />
-                </div>
-                <p className="text-sm text-muted-foreground font-medium">
-                  {userName}
-                </p>
-                <p className="text-xs text-muted-foreground/60 mt-1">
-                  Camera off
-                </p>
-              </div>
-            )}
-            <div className="absolute bottom-2 left-2 bg-black/40 backdrop-blur-sm px-2 py-0.5 rounded-md text-white text-xs">
-              {userName} (You)
-            </div>
-          </div>
-
-          {peers.map((p) => (
-            <PeerVideo key={p.peerId} peer={p.peer} name={p.peerName} />
-          ))}
+        {/* Video Layout */}
+        <div className="flex-1 min-h-0">
+          <VideoLayout
+            localParticipant={localParticipant}
+            remoteParticipants={participants}
+            activeSpeaker={activeSpeaker}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            pinnedParticipant={pinnedParticipant}
+            onPinParticipant={(identity) =>
+              setPinnedParticipant(
+                identity === pinnedParticipant ? "" : identity
+              )
+            }
+          />
         </div>
 
         {/* Bottom Controls */}
