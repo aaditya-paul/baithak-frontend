@@ -14,6 +14,8 @@ interface UseLiveKitProps {
   token: string;
   enabled?: boolean;
   onDisconnected?: () => void;
+  initialMuted?: boolean;
+  initialVideoOff?: boolean;
 }
 
 export function useLiveKit({
@@ -21,6 +23,8 @@ export function useLiveKit({
   token,
   enabled = true,
   onDisconnected,
+  initialMuted = false,
+  initialVideoOff = false,
 }: UseLiveKitProps) {
   const [room, setRoom] = useState<Room | null>(null);
   const [participants, setParticipants] = useState<RemoteParticipant[]>([]);
@@ -28,8 +32,8 @@ export function useLiveKit({
     useState<LocalParticipant | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isVideoOff, setIsVideoOff] = useState(false);
+  const [isMuted, setIsMuted] = useState(initialMuted);
+  const [isVideoOff, setIsVideoOff] = useState(initialVideoOff);
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [activeSpeaker, setActiveSpeaker] = useState<Participant | null>(null);
   const isConnectingRef = useRef(false);
@@ -88,12 +92,25 @@ export function useLiveKit({
         setLocalParticipant(lkRoom.localParticipant);
         setParticipants(Array.from(lkRoom.remoteParticipants.values()));
 
-        // Enable camera and microphone
+        // Enable camera and microphone based on initial state from setup screen
         try {
           await lkRoom.localParticipant.enableCameraAndMicrophone();
           console.log("Camera and microphone enabled");
-          setIsMuted(false);
-          setIsVideoOff(false);
+
+          // Apply initial mute/video state from setup screen
+          if (initialMuted) {
+            await lkRoom.localParticipant.setMicrophoneEnabled(false);
+            setIsMuted(true);
+          } else {
+            setIsMuted(false);
+          }
+
+          if (initialVideoOff) {
+            await lkRoom.localParticipant.setCameraEnabled(false);
+            setIsVideoOff(true);
+          } else {
+            setIsVideoOff(false);
+          }
         } catch (err) {
           console.error("Failed to enable camera/microphone:", err);
         }
@@ -149,16 +166,18 @@ export function useLiveKit({
 
   const toggleMute = async () => {
     if (!localParticipant) return;
-    const enabled = localParticipant.isMicrophoneEnabled;
-    await localParticipant.setMicrophoneEnabled(!enabled);
-    setIsMuted(!enabled);
+    const currentlyEnabled = localParticipant.isMicrophoneEnabled;
+    await localParticipant.setMicrophoneEnabled(!currentlyEnabled);
+    // isMuted is true when microphone is disabled
+    setIsMuted(currentlyEnabled);
   };
 
   const toggleVideo = async () => {
     if (!localParticipant) return;
-    const enabled = localParticipant.isCameraEnabled;
-    await localParticipant.setCameraEnabled(!enabled);
-    setIsVideoOff(!enabled);
+    const currentlyEnabled = localParticipant.isCameraEnabled;
+    await localParticipant.setCameraEnabled(!currentlyEnabled);
+    // isVideoOff is true when camera is disabled
+    setIsVideoOff(currentlyEnabled);
   };
 
   const disconnect = () => {

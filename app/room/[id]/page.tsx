@@ -42,6 +42,8 @@ export default function RoomPage({
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(true);
   const [pinnedParticipant, setPinnedParticipant] = useState<string>("");
+  const [initialMuted, setInitialMuted] = useState(false);
+  const [initialVideoOff, setInitialVideoOff] = useState(false);
 
   const {
     room,
@@ -62,6 +64,8 @@ export default function RoomPage({
     token,
     enabled: shouldConnect && !!token,
     onDisconnected: () => router.push("/"),
+    initialMuted,
+    initialVideoOff,
   });
 
   useEffect(() => {
@@ -71,8 +75,15 @@ export default function RoomPage({
     };
   }, []);
 
-  const joinRoom = async (localStream: MediaStream, name: string) => {
+  const joinRoom = async (
+    localStream: MediaStream,
+    name: string,
+    isMutedFromSetup: boolean,
+    isVideoOffFromSetup: boolean
+  ) => {
     setUserName(name);
+    setInitialMuted(isMutedFromSetup);
+    setInitialVideoOff(isVideoOffFromSetup);
 
     try {
       console.log(`Requesting token for room: ${roomId}`);
