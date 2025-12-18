@@ -1,18 +1,21 @@
 "use client";
 
-import React, { useEffect, useRef, useState, useCallback } from "react";
-import {
-  Participant,
-  Track,
-  TrackPublication,
-  ParticipantEvent,
-} from "livekit-client";
+import React, { useEffect, useRef } from "react";
 import { Mic, MicOff, Pin, VideoOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 
+export interface VideoParticipant {
+  id: string;
+  name: string;
+  videoTrack: MediaStreamTrack | null;
+  audioTrack: MediaStreamTrack | null;
+  isMuted: boolean;
+  isVideoOff: boolean;
+}
+
 interface VideoTileProps {
-  participant: Participant;
+  participant: VideoParticipant;
   isLocal?: boolean;
   isSpeaking?: boolean;
   isPinned?: boolean;
@@ -30,103 +33,29 @@ export const VideoTile = ({
 }: VideoTileProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
-  const [hasVideo, setHasVideo] = useState(false);
-  const [isCameraEnabled, setIsCameraEnabled] = useState(
-    participant.isCameraEnabled
-  );
-
-  // Update camera enabled state when it changes
-  const updateCameraState = useCallback(() => {
-    setIsCameraEnabled(participant.isCameraEnabled);
-  }, [participant]);
 
   useEffect(() => {
-    const handleTrackSubscribed = (track: Track) => {
-      if (track.kind === Track.Kind.Video) {
-        setHasVideo(true);
-        updateCameraState();
-        if (videoRef.current) {
-          track.attach(videoRef.current);
-        }
-      } else if (track.kind === Track.Kind.Audio && !isLocal) {
-        if (audioRef.current) {
-          track.attach(audioRef.current);
-        }
-      }
-    };
+    const videoEl = videoRef.current;
+    if (videoEl && participant.videoTrack) {
+      const stream = new MediaStream([participant.videoTrack]);
+      videoEl.srcObject = stream;
+    } else if (videoEl) {
+      videoEl.srcObject = null;
+    }
+  }, [participant.videoTrack]);
 
-    const handleTrackUnsubscribed = (track: Track) => {
-      if (track.kind === Track.Kind.Video) {
-        setHasVideo(false);
-        track.detach();
-      } else if (track.kind === Track.Kind.Audio) {
-        track.detach();
-      }
-    };
+  useEffect(() => {
+    const audioEl = audioRef.current;
+    if (audioEl && participant.audioTrack && !isLocal) {
+      const stream = new MediaStream([participant.audioTrack]);
+      audioEl.srcObject = stream;
+    } else if (audioEl) {
+      audioEl.srcObject = null;
+    }
+  }, [participant.audioTrack, isLocal]);
 
-    const handleTrackPublished = (publication: TrackPublication) => {
-      if (publication.track) {
-        handleTrackSubscribed(publication.track);
-      }
-      updateCameraState();
-    };
-
-    const handleTrackUnpublished = () => {
-      updateCameraState();
-    };
-
-    const handleTrackMuted = (publication: TrackPublication) => {
-      if (publication.source === Track.Source.Camera) {
-        updateCameraState();
-      }
-    };
-
-    const handleTrackUnmuted = (publication: TrackPublication) => {
-      if (publication.source === Track.Source.Camera) {
-        updateCameraState();
-      }
-    };
-
-    // Check initial camera state
-    updateCameraState();
-
-    // Attach existing tracks
-    participant.trackPublications.forEach((publication: TrackPublication) => {
-      if (publication.track) {
-        handleTrackSubscribed(publication.track);
-      }
-    });
-
-    // Listen for track events
-    participant.on("trackSubscribed", handleTrackSubscribed);
-    participant.on("trackUnsubscribed", handleTrackUnsubscribed);
-    participant.on("trackPublished", handleTrackPublished);
-    participant.on("trackUnpublished", handleTrackUnpublished);
-    participant.on("trackMuted", handleTrackMuted);
-    participant.on("trackUnmuted", handleTrackUnmuted);
-
-    return () => {
-      participant.off("trackSubscribed", handleTrackSubscribed);
-      participant.off("trackUnsubscribed", handleTrackUnsubscribed);
-      participant.off("trackPublished", handleTrackPublished);
-      participant.off("trackUnpublished", handleTrackUnpublished);
-      participant.off("trackMuted", handleTrackMuted);
-      participant.off("trackUnmuted", handleTrackUnmuted);
-
-      // Detach all tracks
-      participant.trackPublications.forEach((publication: TrackPublication) => {
-        if (publication.track) {
-          publication.track.detach();
-        }
-      });
-    };
-  }, [participant, isLocal, updateCameraState]);
-
-  const displayName = participant.name || participant.identity;
-  const isMuted = !participant.isMicrophoneEnabled;
-
-  // Show avatar when camera is disabled OR when there's no video track
-  const showAvatar = !isCameraEnabled || !hasVideo;
+  // Show avatar when we don't have a video track or video is marked off
+  const showAvatar = participant.isVideoOff || !participant.videoTrack;
 
   return (
     <motion.div
@@ -197,7 +126,7 @@ export const VideoTile = ({
             <div className="w-24 h-24 rounded-full bg-gradient-to-br from-primary/40 to-primary/20 flex items-center justify-center backdrop-blur-sm border-2 border-primary/30 shadow-xl shadow-primary/20">
               <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center">
                 <span className="text-4xl font-bold text-primary drop-shadow-lg">
-                  {displayName.charAt(0).toUpperCase()}
+                  {participant.name.charAt(0).toUpperCase()}
                 </span>
               </div>
             </div>
@@ -213,7 +142,7 @@ export const VideoTile = ({
             transition={{ delay: 0.1 }}
             className="text-lg font-semibold text-white mt-4"
           >
-            {displayName}
+            {participant.name}
           </motion.p>
           <motion.p
             initial={{ y: 10, opacity: 0 }}
@@ -232,16 +161,16 @@ export const VideoTile = ({
           <div
             className={cn(
               "px-2.5 py-1 rounded-full backdrop-blur-md flex items-center gap-1.5",
-              isMuted ? "bg-destructive/80" : "bg-black/40"
+              participant.isMuted ? "bg-destructive/80" : "bg-black/40"
             )}
           >
-            {isMuted ? (
+            {participant.isMuted ? (
               <MicOff className="w-3 h-3 text-white" />
             ) : (
               <Mic className="w-3 h-3 text-white" />
             )}
             <span className="text-xs font-medium text-white">
-              {displayName}
+              {participant.name}
               {isLocal && " (You)"}
             </span>
           </div>
@@ -284,7 +213,7 @@ export const VideoTile = ({
         )}
       </div>
 
-      {/* Connection Quality Indicator */}
+      {/* Connection Quality Indicator - Mocked for now since we don't have stats yet */}
       <div className="absolute top-3 right-3 flex gap-0.5">
         {[...Array(3)].map((_, i) => (
           <div

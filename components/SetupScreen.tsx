@@ -48,6 +48,13 @@ export function SetupScreen({ onJoin }: SetupScreenProps) {
   useEffect(() => {
     const requestPermissions = async () => {
       try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          setError(
+            "Secure Context Required. On Laptop, use localhost. On Mobile, use HTTPS or enable chrome://flags."
+          );
+          return;
+        }
+
         // Request permissions with a temporary stream
         const tempStream = await navigator.mediaDevices.getUserMedia({
           audio: true,

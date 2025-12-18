@@ -1,239 +1,238 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Mic, Video, Volume2, ChevronDown, Settings, X } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Settings, X, Mic, Video as VideoIcon, Volume2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Room } from "livekit-client";
-import { DeviceSelections } from "@/hooks/useLiveKit";
+import { DeviceSelections } from "@/hooks/useMediasoup";
+import { ChevronDown } from "lucide-react";
 
 interface DeviceSettingsProps {
-  room: Room | null;
   isOpen: boolean;
   onClose: () => void;
-  currentDevices?: DeviceSelections;
+  currentDevices: DeviceSelections;
+  onDeviceChange?: (kind: keyof DeviceSelections, deviceId: string) => void;
 }
 
-export function DeviceSettings({
-  room,
+export const DeviceSettings = ({
   isOpen,
   onClose,
   currentDevices,
-}: DeviceSettingsProps) {
-  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
-  const [selectedAudioInput, setSelectedAudioInput] = useState("");
-  const [selectedVideoInput, setSelectedVideoInput] = useState("");
-  const [selectedAudioOutput, setSelectedAudioOutput] = useState("");
+  onDeviceChange,
+}: DeviceSettingsProps) => {
+  const [audioInputs, setAudioInputs] = useState<MediaDeviceInfo[]>([]);
+  const [videoInputs, setVideoInputs] = useState<MediaDeviceInfo[]>([]);
+  const [audioOutputs, setAudioOutputs] = useState<MediaDeviceInfo[]>([]);
+  const [activeTab, setActiveTab] = useState<"audio" | "video">("audio");
 
-  // Enumerate devices and set selections based on current devices or LiveKit active devices
   useEffect(() => {
-    const loadDevices = async () => {
+    const getDevices = async () => {
       try {
-        const deviceList = await navigator.mediaDevices.enumerateDevices();
-        setDevices(deviceList);
+        // Request permission primarily to get labels
+        await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
 
-        // Try to get active devices from LiveKit room first
-        let activeAudioInput = "";
-        let activeVideoInput = "";
-        let activeAudioOutput = "";
-
-        if (room) {
-          try {
-            activeAudioInput = (await room.getActiveDevice("audioinput")) || "";
-            activeVideoInput = (await room.getActiveDevice("videoinput")) || "";
-            activeAudioOutput =
-              (await room.getActiveDevice("audiooutput")) || "";
-          } catch (e) {
-            console.log("Could not get active devices from room");
-          }
-        }
-
-        // Use active devices from room, or fall back to currentDevices prop, or use first available
-        const audioInputToUse =
-          activeAudioInput ||
-          currentDevices?.audioInput ||
-          deviceList.find((d) => d.kind === "audioinput")?.deviceId ||
-          "";
-        const videoInputToUse =
-          activeVideoInput ||
-          currentDevices?.videoInput ||
-          deviceList.find((d) => d.kind === "videoinput")?.deviceId ||
-          "";
-        const audioOutputToUse =
-          activeAudioOutput ||
-          currentDevices?.audioOutput ||
-          deviceList.find((d) => d.kind === "audiooutput")?.deviceId ||
-          "";
-
-        setSelectedAudioInput(audioInputToUse);
-        setSelectedVideoInput(videoInputToUse);
-        setSelectedAudioOutput(audioOutputToUse);
-      } catch (err) {
-        console.error("Error enumerating devices:", err);
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        setAudioInputs(devices.filter((d) => d.kind === "audioinput"));
+        setVideoInputs(devices.filter((d) => d.kind === "videoinput"));
+        setAudioOutputs(devices.filter((d) => d.kind === "audiooutput"));
+      } catch (error) {
+        console.error("Error getting devices:", error);
       }
     };
 
     if (isOpen) {
-      loadDevices();
+      getDevices();
+      navigator.mediaDevices.addEventListener("devicechange", getDevices);
+      return () => {
+        navigator.mediaDevices.removeEventListener("devicechange", getDevices);
+      };
     }
-  }, [isOpen, room, currentDevices]);
+  }, [isOpen]);
 
-  // Handle microphone change
-  const handleAudioInputChange = async (deviceId: string) => {
-    setSelectedAudioInput(deviceId);
-    if (room?.localParticipant) {
-      try {
-        await room.switchActiveDevice("audioinput", deviceId);
-        console.log("Switched audio input to:", deviceId);
-      } catch (err) {
-        console.error("Error switching audio input:", err);
-      }
-    }
-  };
-
-  // Handle camera change
-  const handleVideoInputChange = async (deviceId: string) => {
-    setSelectedVideoInput(deviceId);
-    if (room?.localParticipant) {
-      try {
-        await room.switchActiveDevice("videoinput", deviceId);
-        console.log("Switched video input to:", deviceId);
-      } catch (err) {
-        console.error("Error switching video input:", err);
-      }
-    }
-  };
-
-  // Handle speaker change
-  const handleAudioOutputChange = async (deviceId: string) => {
-    setSelectedAudioOutput(deviceId);
-    if (room) {
-      try {
-        await room.switchActiveDevice("audiooutput", deviceId);
-        console.log("Switched audio output to:", deviceId);
-      } catch (err) {
-        console.error("Error switching audio output:", err);
-      }
-    }
-  };
-
-  const audioInputDevices = devices.filter((d) => d.kind === "audioinput");
-  const videoInputDevices = devices.filter((d) => d.kind === "videoinput");
-  const audioOutputDevices = devices.filter((d) => d.kind === "audiooutput");
+  if (!isOpen) return null;
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <>
-          {/* Backdrop */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+    <>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-card border border-border rounded-xl shadow-2xl z-50 overflow-hidden"
+      >
+        <div className="flex items-center justify-between p-4 border-b border-border bg-muted/30">
+          <div className="flex items-center gap-2">
+            <Settings className="w-5 h-5 text-primary" />
+            <h2 className="font-semibold">Device Settings</h2>
+          </div>
+          <button
             onClick={onClose}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
-          />
-
-          {/* Panel */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl z-50 overflow-hidden"
+            className="p-1 hover:bg-muted rounded-full transition-colors"
           >
-            {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-border">
-              <div className="flex items-center gap-2">
-                <Settings className="w-5 h-5 text-primary" />
-                <h2 className="text-lg font-semibold">Device Settings</h2>
-              </div>
-              <button
-                onClick={onClose}
-                className="p-1.5 rounded-lg hover:bg-muted transition-colors"
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="flex border-b border-border">
+          <button
+            onClick={() => setActiveTab("audio")}
+            className={`flex-1 p-3 text-sm font-medium transition-colors relative ${
+              activeTab === "audio"
+                ? "text-primary"
+                : "text-muted-foreground hover:bg-muted/50"
+            }`}
+          >
+            <div className="flex items-center justify-center gap-2">
+              <Mic className="w-4 h-4" />
+              Audio
+            </div>
+            {activeTab === "audio" && (
+              <motion.div
+                layoutId="activeTab"
+                className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
+              />
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab("video")}
+            className={`flex-1 p-3 text-sm font-medium transition-colors relative ${
+              activeTab === "video"
+                ? "text-primary"
+                : "text-muted-foreground hover:bg-muted/50"
+            }`}
+          >
+            <div className="flex items-center justify-center gap-2">
+              <VideoIcon className="w-4 h-4" />
+              Video
+            </div>
+            {activeTab === "video" && (
+              <motion.div
+                layoutId="activeTab"
+                className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
+              />
+            )}
+          </button>
+        </div>
+
+        <div className="p-4 space-y-6">
+          <AnimatePresence mode="wait">
+            {activeTab === "audio" ? (
+              <motion.div
+                key="audio"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                className="space-y-4"
               >
-                <X className="w-5 h-5 text-muted-foreground" />
-              </button>
-            </div>
-
-            {/* Device Selectors */}
-            <div className="p-4 space-y-5">
-              {/* Microphone */}
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                  <Mic className="w-3.5 h-3.5" />
-                  Microphone
-                </label>
-                <div className="relative">
-                  <select
-                    value={selectedAudioInput}
-                    onChange={(e) => handleAudioInputChange(e.target.value)}
-                    className="w-full p-3 pr-10 rounded-lg bg-background border border-border text-foreground text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all cursor-pointer"
-                  >
-                    {audioInputDevices.map((d) => (
-                      <option key={d.deviceId} value={d.deviceId}>
-                        {d.label || `Microphone ${d.deviceId.slice(0, 5)}`}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                <div className="space-y-2">
+                  <label className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+                    <Mic className="w-4 h-4" />
+                    Microphone
+                  </label>
+                  <div className="relative">
+                    <select
+                      className="w-full bg-secondary/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 appearance-none"
+                      value={currentDevices.audioInput || ""}
+                      onChange={(e) =>
+                        onDeviceChange?.("audioInput", e.target.value)
+                      }
+                    >
+                      {audioInputs.map((device) => (
+                        <option key={device.deviceId} value={device.deviceId}>
+                          {device.label ||
+                            `Microphone ${device.deviceId.slice(0, 5)}...`}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                  </div>
                 </div>
-              </div>
 
-              {/* Camera */}
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                  <Video className="w-3.5 h-3.5" />
-                  Camera
-                </label>
-                <div className="relative">
-                  <select
-                    value={selectedVideoInput}
-                    onChange={(e) => handleVideoInputChange(e.target.value)}
-                    className="w-full p-3 pr-10 rounded-lg bg-background border border-border text-foreground text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all cursor-pointer"
-                  >
-                    {videoInputDevices.map((d) => (
-                      <option key={d.deviceId} value={d.deviceId}>
-                        {d.label || `Camera ${d.deviceId.slice(0, 5)}`}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                <div className="space-y-2">
+                  <label className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+                    <Volume2 className="w-4 h-4" />
+                    Speaker
+                  </label>
+                  <div className="relative">
+                    <select
+                      className="w-full bg-secondary/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 appearance-none"
+                      value={currentDevices.audioOutput || ""}
+                      onChange={(e) =>
+                        onDeviceChange?.("audioOutput", e.target.value)
+                      }
+                      disabled={audioOutputs.length === 0}
+                    >
+                      {audioOutputs.length === 0 ? (
+                        <option value="">System Default</option>
+                      ) : (
+                        audioOutputs.map((device) => (
+                          <option key={device.deviceId} value={device.deviceId}>
+                            {device.label ||
+                              `Speaker ${device.deviceId.slice(0, 5)}...`}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                  </div>
+                  {audioOutputs.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      Audio output selection is only available on supported
+                      browsers (e.g. Chrome).
+                    </p>
+                  )}
                 </div>
-              </div>
-
-              {/* Speaker */}
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                  <Volume2 className="w-3.5 h-3.5" />
-                  Speaker
-                </label>
-                <div className="relative">
-                  <select
-                    value={selectedAudioOutput}
-                    onChange={(e) => handleAudioOutputChange(e.target.value)}
-                    className="w-full p-3 pr-10 rounded-lg bg-background border border-border text-foreground text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all cursor-pointer"
-                  >
-                    {audioOutputDevices.map((d) => (
-                      <option key={d.deviceId} value={d.deviceId}>
-                        {d.label || `Speaker ${d.deviceId.slice(0, 5)}`}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="video"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="space-y-4"
+              >
+                <div className="space-y-2">
+                  <label className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+                    <VideoIcon className="w-4 h-4" />
+                    Camera
+                  </label>
+                  <div className="relative">
+                    <select
+                      className="w-full bg-secondary/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 appearance-none"
+                      value={currentDevices.videoInput || ""}
+                      onChange={(e) =>
+                        onDeviceChange?.("videoInput", e.target.value)
+                      }
+                    >
+                      {videoInputs.map((device) => (
+                        <option key={device.deviceId} value={device.deviceId}>
+                          {device.label ||
+                            `Camera ${device.deviceId.slice(0, 5)}...`}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                  </div>
                 </div>
-              </div>
-            </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
-            {/* Footer */}
-            <div className="p-4 border-t border-border bg-muted/30">
-              <p className="text-xs text-muted-foreground text-center">
-                Changes are applied immediately
-              </p>
-            </div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
+        <div className="p-4 border-t border-border bg-muted/30 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium"
+          >
+            Done
+          </button>
+        </div>
+      </motion.div>
+    </>
   );
-}
+};

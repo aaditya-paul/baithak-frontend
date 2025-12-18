@@ -1,7 +1,12 @@
 "use client";
 
-import { use, useEffect, useRef, useState } from "react";
-import io, { Socket } from "socket.io-client";
+import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { DeviceSettings } from "@/components/DeviceSettings";
+import { SetupScreen } from "@/components/SetupScreen";
+import { VideoLayout } from "@/components/VideoLayout";
+import { ChatSidebar } from "@/components/ChatSidebar";
+import { useMediasoup, DeviceSelections } from "@/hooks/useMediasoup";
 import {
   Mic,
   MicOff,
@@ -9,327 +14,269 @@ import {
   VideoOff,
   PhoneOff,
   MessageSquare,
-  Flame,
-  X,
-  Loader2,
   Settings,
+  Share,
+  Users,
+  Loader2,
 } from "lucide-react";
-import { motion } from "framer-motion";
-import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { SetupScreen } from "@/components/SetupScreen";
-import { ChatSidebar } from "@/components/ChatSidebar";
-import { VideoLayout } from "@/components/VideoLayout";
-import { DeviceSettings } from "@/components/DeviceSettings";
-import { useLiveKit, DeviceSelections } from "@/hooks/useLiveKit";
+import { motion, AnimatePresence } from "framer-motion";
 
-const SOCKET_URL = "http://localhost:5000";
-const LIVEKIT_URL =
-  process.env.NEXT_PUBLIC_LIVEKIT_URL || "ws://localhost:7880";
+// Define the URL for socket connection
+const SOCKET_URL =
+  process.env.NEXT_PUBLIC_SOCKET_URL || "http://10.80.224.96:5000";
 
-export default function RoomPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const resolvedParams = use(params);
-  const roomId = resolvedParams.id;
+export default function RoomPage() {
+  const params = useParams();
   const router = useRouter();
+  const roomId = params.id as string;
 
-  const [joined, setJoined] = useState(false);
+  const [hasJoined, setHasJoined] = useState(false);
   const [userName, setUserName] = useState("");
-  const [token, setToken] = useState("");
-  const [shouldConnect, setShouldConnect] = useState(false);
-  const socketRef = useRef<Socket | null>(null);
-  const [socket, setSocket] = useState<Socket | null>(null);
-  const [isChatOpen, setIsChatOpen] = useState(true);
-  const [pinnedParticipant, setPinnedParticipant] = useState<string>("");
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  // Initial state from setup screen
   const [initialMuted, setInitialMuted] = useState(false);
   const [initialVideoOff, setInitialVideoOff] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [initialDevices, setInitialDevices] = useState<DeviceSelections>({});
 
   const {
-    room,
-    participants,
+    socket,
     localParticipant,
+    participants,
+    activeSpeaker,
     isConnecting,
     error,
     isMuted,
     isVideoOff,
     viewMode,
-    activeSpeaker,
+    setViewMode,
     toggleMute,
     toggleVideo,
+    changeAudioInput,
+    changeVideoInput,
     disconnect,
-    setViewMode,
-  } = useLiveKit({
-    url: LIVEKIT_URL,
-    token,
-    enabled: shouldConnect && !!token,
-    onDisconnected: () => router.push("/"),
+  } = useMediasoup({
+    url: SOCKET_URL,
+    roomId,
+    userName,
+    enabled: hasJoined,
     initialMuted,
     initialVideoOff,
     initialDevices,
+    onDisconnected: () => {
+      router.push("/");
+    },
   });
 
-  useEffect(() => {
-    return () => {
-      socketRef.current?.disconnect();
-      setSocket(null);
-    };
-  }, []);
-
-  const joinRoom = async (
-    localStream: MediaStream,
+  const handleJoin = (
+    stream: MediaStream,
     name: string,
-    isMutedFromSetup: boolean,
-    isVideoOffFromSetup: boolean,
-    devicesFromSetup: DeviceSelections
+    muted: boolean,
+    videoOff: boolean,
+    devices: { audioInput: string; videoInput: string; audioOutput: string }
   ) => {
+    // We don't need the stream here as useMediasoup will get its own stream
+    // based on devices. But we should stop the setup stream to release devices.
+    stream.getTracks().forEach((t) => t.stop());
+
     setUserName(name);
-    setInitialMuted(isMutedFromSetup);
-    setInitialVideoOff(isVideoOffFromSetup);
-    setInitialDevices(devicesFromSetup);
-
-    try {
-      console.log(`Requesting token for room: ${roomId}`);
-
-      // Get LiveKit token from backend
-      const response = await fetch(`${SOCKET_URL}/token`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          roomName: roomId,
-          participantName: name,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Token request failed:", errorText);
-        throw new Error("Failed to get token");
-      }
-
-      const data = await response.json();
-      console.log("✅ Received token from backend");
-      console.log(`Token (first 50 chars): ${data.token?.substring(0, 50)}...`);
-      console.log(`LiveKit URL: ${LIVEKIT_URL}`);
-
-      // Connect to socket for chat first
-      socketRef.current = io(SOCKET_URL);
-      setSocket(socketRef.current);
-      socketRef.current.emit("join-room", { roomId, userName: name });
-
-      // Then set token and enable LiveKit connection
-      setToken(data.token);
-      setShouldConnect(true);
-      setJoined(true);
-
-      // Stop the preview stream as LiveKit will handle it
-      localStream.getTracks().forEach((t) => t.stop());
-    } catch (err) {
-      console.error("Failed to join room:", err);
-      alert("Failed to join room. Please try again.");
-    }
+    setInitialMuted(muted);
+    setInitialVideoOff(videoOff);
+    setInitialDevices(devices);
+    setHasJoined(true);
   };
 
-  const leaveRoom = () => {
-    socketRef.current?.disconnect();
-    setSocket(null);
+  const handleLeave = () => {
     disconnect();
-    router.push("/");
   };
 
-  if (!joined) {
-    return <SetupScreen onJoin={joinRoom} />;
-  }
+  const copyRoomLink = () => {
+    const url = window.location.href;
+    navigator.clipboard.writeText(url);
+    alert("Room link copied to clipboard");
+  };
 
-  if (isConnecting) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Connecting to room...</p>
-        </div>
-      </div>
-    );
+  const handleDeviceChange = async (
+    kind: keyof DeviceSelections,
+    deviceId: string
+  ) => {
+    if (kind === "audioInput") {
+      await changeAudioInput(deviceId);
+    } else if (kind === "videoInput") {
+      await changeVideoInput(deviceId);
+    }
+    // audioOutput is handled locally by components listening to the prop change if we stored it
+  };
+
+  if (!hasJoined) {
+    return <SetupScreen onJoin={handleJoin} />;
   }
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-screen bg-background">
-        <div className="flex flex-col items-center gap-4 max-w-md text-center">
-          <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center">
-            <X className="w-8 h-8 text-destructive" />
-          </div>
-          <h2 className="text-lg font-semibold">Connection Error</h2>
-          <p className="text-sm text-muted-foreground">{error.message}</p>
-          <button
-            onClick={() => router.push("/")}
-            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90"
-          >
-            Go Back
-          </button>
-        </div>
+      <div className="flex flex-col items-center justify-center min-h-screen gap-4">
+        <h2 className="text-xl font-bold text-red-500">Connection Error</h2>
+        <p className="text-neutral-400">{error.message}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+        >
+          Retry
+        </button>
       </div>
     );
   }
 
-  if (!localParticipant) {
-    return null;
-  }
-
   return (
-    <div className="flex bg-background h-screen overflow-hidden">
-      {/* Main Video Area */}
-      <div className="flex-1 relative p-4 flex flex-col transition-all duration-300 overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-4 z-10">
-          <div className="flex items-center gap-2 text-primary">
-            <Flame className="w-5 h-5" />
-            <span className="font-semibold">Baithak</span>
+    <div className="flex h-screen bg-neutral-950 text-white overflow-hidden relative font-sans">
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0 transition-all duration-300">
+        <header className="h-16 border-b border-neutral-800 flex items-center justify-between px-6 bg-neutral-900/50 backdrop-blur-sm z-10">
+          <div className="flex items-center gap-4">
+            <h1 className="font-semibold text-lg">{roomId}</h1>
+            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-neutral-800 text-xs font-medium text-neutral-400">
+              <Users className="w-3 h-3" />
+              <span>{participants.length + (localParticipant ? 1 : 0)}</span>
+            </div>
           </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={copyRoomLink}
+              className="p-2 rounded-md hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors"
+              title="Copy Link"
+            >
+              <Share className="w-5 h-5" />
+            </button>
+
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className={cn(
+                "p-2 rounded-md transition-colors",
+                isSettingsOpen
+                  ? "bg-neutral-800 text-white"
+                  : "text-neutral-400 hover:bg-neutral-800 hover:text-white"
+              )}
+              title="Settings"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
+          </div>
+        </header>
+
+        <main className="flex-1 p-4 relative overflow-hidden flex items-center justify-center">
+          {isConnecting || !localParticipant ? (
+            <div className="flex flex-col items-center gap-4">
+              <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
+              <p className="text-neutral-400 font-medium">
+                Connecting to room...
+              </p>
+            </div>
+          ) : (
+            <div className="w-full h-full">
+              <VideoLayout
+                localParticipant={localParticipant}
+                remoteParticipants={participants}
+                activeSpeaker={activeSpeaker}
+                viewMode={viewMode}
+                onViewModeChange={setViewMode}
+              />
+            </div>
+          )}
+        </main>
+
+        <footer className="h-20 border-t border-neutral-800 bg-neutral-900/50 backdrop-blur-md flex items-center justify-center gap-4 z-10 px-4">
           <div className="flex items-center gap-3">
-            <span className="text-xs text-muted-foreground">
-              {participants.length + 1} participant
-              {participants.length !== 0 ? "s" : ""}
-            </span>
-            <span className="text-xs bg-secondary-foreground border-secondary border text-secondary px-2 py-1 rounded-full">
-              Room: {roomId}
-            </span>
+            <button
+              onClick={toggleMute}
+              className={cn(
+                "w-12 h-12 rounded-full flex items-center justify-center transition-all",
+                isMuted
+                  ? "bg-red-500 hover:bg-red-600 text-white"
+                  : "bg-neutral-800 hover:bg-neutral-700 text-white"
+              )}
+              title={isMuted ? "Unmute" : "Mute"}
+            >
+              {isMuted ? (
+                <MicOff className="w-5 h-5" />
+              ) : (
+                <Mic className="w-5 h-5" />
+              )}
+            </button>
+
+            <button
+              onClick={toggleVideo}
+              className={cn(
+                "w-12 h-12 rounded-full flex items-center justify-center transition-all",
+                isVideoOff
+                  ? "bg-red-500 hover:bg-red-600 text-white"
+                  : "bg-neutral-800 hover:bg-neutral-700 text-white"
+              )}
+              title={isVideoOff ? "Start Video" : "Stop Video"}
+            >
+              {isVideoOff ? (
+                <VideoOff className="w-5 h-5" />
+              ) : (
+                <Video className="w-5 h-5" />
+              )}
+            </button>
           </div>
-        </div>
 
-        {/* Video Layout */}
-        <div className="flex-1 min-h-0">
-          <VideoLayout
-            localParticipant={localParticipant}
-            remoteParticipants={participants}
-            activeSpeaker={activeSpeaker}
-            viewMode={viewMode}
-            onViewModeChange={setViewMode}
-            pinnedParticipant={pinnedParticipant}
-            onPinParticipant={(identity) =>
-              setPinnedParticipant(
-                identity === pinnedParticipant ? "" : identity
-              )
-            }
-          />
-        </div>
+          <div className="w-px h-8 bg-neutral-800 mx-2" />
 
-        {/* Bottom Controls */}
-        <motion.div
-          initial={{ y: 50, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-card/90 backdrop-blur-xl px-3 py-2 rounded-full shadow-lg border border-border z-20"
-        >
-          <button
-            onClick={toggleMute}
-            className={cn(
-              "p-2.5 rounded-full transition-all",
-              isMuted
-                ? "bg-destructive text-white"
-                : "bg-secondary text-foreground hover:bg-muted"
-            )}
-          >
-            {isMuted ? (
-              <MicOff className="w-4 h-4" />
-            ) : (
-              <Mic className="w-4 h-4" />
-            )}
-          </button>
-          <button
-            onClick={toggleVideo}
-            className={cn(
-              "p-2.5 rounded-full transition-all",
-              isVideoOff
-                ? "bg-destructive text-white"
-                : "bg-secondary text-foreground hover:bg-muted"
-            )}
-          >
-            {isVideoOff ? (
-              <VideoOff className="w-4 h-4" />
-            ) : (
-              <Video className="w-4 h-4" />
-            )}
-          </button>
-          <button
-            onClick={leaveRoom}
-            className="p-2.5 rounded-full bg-destructive/10 text-destructive hover:bg-destructive hover:text-white transition-all"
-          >
-            <PhoneOff className="w-4 h-4" />
-          </button>
-          <div className="w-px h-5 bg-border" />
-          <button
-            onClick={() => setIsSettingsOpen(true)}
-            className={cn(
-              "p-2.5 rounded-full transition-all",
-              isSettingsOpen
-                ? "bg-primary text-white"
-                : "bg-secondary text-foreground hover:bg-muted"
-            )}
-            title="Device Settings"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
           <button
             onClick={() => setIsChatOpen(!isChatOpen)}
             className={cn(
-              "p-2.5 rounded-full transition-all",
+              "w-12 h-12 rounded-full flex items-center justify-center transition-all",
               isChatOpen
-                ? "bg-primary text-white"
-                : "bg-secondary text-foreground hover:bg-muted"
+                ? "bg-blue-600 hover:bg-blue-700 text-white"
+                : "bg-neutral-800 hover:bg-neutral-700 text-white"
             )}
+            title="Chat"
           >
-            <MessageSquare className="w-4 h-4" />
+            <MessageSquare className="w-5 h-5" />
           </button>
-        </motion.div>
 
-        {/* Device Settings Modal */}
-        <DeviceSettings
-          room={room}
-          isOpen={isSettingsOpen}
-          onClose={() => setIsSettingsOpen(false)}
-          currentDevices={initialDevices}
-        />
+          <div className="w-px h-8 bg-neutral-800 mx-2" />
+
+          <button
+            onClick={handleLeave}
+            className="h-12 px-6 rounded-full bg-red-500 hover:bg-red-600 text-white font-semibold flex items-center gap-2 transition-colors"
+          >
+            <PhoneOff className="w-5 h-5" />
+            <span>Leave</span>
+          </button>
+        </footer>
       </div>
 
-      {/* Right Sidebar Chat */}
-      {isChatOpen && (
-        <>
-          {/* Mobile backdrop */}
+      {/* Chat Sidebar */}
+      <AnimatePresence>
+        {isChatOpen && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setIsChatOpen(false)}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-30 md:hidden"
-          />
-
-          <motion.div
-            initial={{ x: "100%" }}
-            animate={{ x: 0 }}
-            exit={{ x: "100%" }}
-            transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="fixed md:relative inset-y-0 right-0 w-full sm:w-80 md:w-80 h-full bg-card border-l border-border z-40 md:z-30 flex flex-col flex-shrink-0"
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: 320, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={{ type: "spring", damping: 30, stiffness: 300 }}
+            className="border-l border-neutral-800 bg-neutral-900/95 backdrop-blur-sm shadow-xl z-20 overflow-hidden"
           >
-            <div className="p-3 border-b border-border flex items-center justify-between">
-              <h2 className="font-semibold text-sm">Chat</h2>
-              <button
-                onClick={() => setIsChatOpen(false)}
-                className="p-1 rounded-md hover:bg-muted transition-colors"
-                aria-label="Close chat"
-              >
-                <X className="w-4 h-4 text-muted-foreground" />
-              </button>
-            </div>
-            <ChatSidebar socket={socket} roomId={roomId} isOpen={isChatOpen} />
+            {socket && (
+              <ChatSidebar
+                roomId={roomId}
+                socket={socket}
+                onClose={() => setIsChatOpen(false)}
+              />
+            )}
           </motion.div>
-        </>
-      )}
+        )}
+      </AnimatePresence>
+
+      <DeviceSettings
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        currentDevices={initialDevices} // This passes initial devices, dynamic updates via handleDeviceChange
+        onDeviceChange={handleDeviceChange}
+      />
     </div>
   );
 }
