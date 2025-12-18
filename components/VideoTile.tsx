@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
-import { Mic, MicOff, Pin, VideoOff } from "lucide-react";
+import { Mic, MicOff, VideoOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 
@@ -18,8 +18,6 @@ interface VideoTileProps {
   participant: VideoParticipant;
   isLocal?: boolean;
   isSpeaking?: boolean;
-  isPinned?: boolean;
-  onPin?: () => void;
   className?: string;
 }
 
@@ -27,8 +25,6 @@ export const VideoTile = ({
   participant,
   isLocal = false,
   isSpeaking = false,
-  isPinned = false,
-  onPin,
   className,
 }: VideoTileProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -54,31 +50,33 @@ export const VideoTile = ({
     }
   }, [participant.audioTrack, isLocal]);
 
-  // Show avatar when we don't have a video track or video is marked off
   const showAvatar = participant.isVideoOff || !participant.videoTrack;
 
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, scale: 0.9 }}
+      initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.9 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      transition={{ duration: 0.2 }}
       className={cn(
-        "relative w-full h-full bg-gradient-to-br from-slate-900 to-slate-800 rounded-xl overflow-hidden border-2 transition-all duration-300",
+        "relative w-full h-full min-h-0 bg-gradient-to-br from-neutral-900 to-neutral-800 rounded-2xl overflow-hidden transition-all duration-300",
         isSpeaking
-          ? "border-primary shadow-lg shadow-primary/50"
-          : "border-border",
-        isPinned && "ring-2 ring-primary ring-offset-2 ring-offset-background",
+          ? "ring-2 ring-green-500 ring-offset-2 ring-offset-neutral-950 shadow-lg shadow-green-500/20"
+          : "ring-1 ring-neutral-700/50",
         className
       )}
     >
-      {/* Video Element */}
+      {/* Video Element - absolute fill */}
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted={isLocal}
-        className={cn("w-full h-full object-cover", showAvatar && "hidden")}
+        className={cn(
+          "absolute inset-0 w-full h-full object-cover",
+          showAvatar && "opacity-0"
+        )}
       />
 
       {/* Audio Element (for remote participants) */}
@@ -86,145 +84,83 @@ export const VideoTile = ({
 
       {/* Video Off Placeholder - Avatar */}
       {showAvatar && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950">
-          {/* Animated background elements */}
-          <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-neutral-800 via-neutral-900 to-neutral-950">
+          {/* Subtle animated orbs */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
             <motion.div
               animate={{
-                scale: [1, 1.2, 1],
-                opacity: [0.1, 0.15, 0.1],
+                scale: [1, 1.1, 1],
+                opacity: [0.05, 0.1, 0.05],
               }}
               transition={{
-                duration: 4,
+                duration: 6,
                 repeat: Infinity,
                 ease: "easeInOut",
               }}
-              className="absolute -top-1/4 -right-1/4 w-1/2 h-1/2 bg-primary/20 rounded-full blur-3xl"
-            />
-            <motion.div
-              animate={{
-                scale: [1, 1.15, 1],
-                opacity: [0.1, 0.12, 0.1],
-              }}
-              transition={{
-                duration: 5,
-                repeat: Infinity,
-                ease: "easeInOut",
-                delay: 1,
-              }}
-              className="absolute -bottom-1/4 -left-1/4 w-1/2 h-1/2 bg-secondary/20 rounded-full blur-3xl"
+              className="absolute top-1/4 right-1/4 w-32 h-32 bg-blue-500/30 rounded-full blur-3xl"
             />
           </div>
 
-          {/* Avatar circle */}
-          <motion.div
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 0.3 }}
-            className="relative"
-          >
-            <div className="w-24 h-24 rounded-full bg-gradient-to-br from-primary/40 to-primary/20 flex items-center justify-center backdrop-blur-sm border-2 border-primary/30 shadow-xl shadow-primary/20">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center">
-                <span className="text-4xl font-bold text-primary drop-shadow-lg">
-                  {participant.name.charAt(0).toUpperCase()}
-                </span>
-              </div>
-            </div>
-            {/* Camera off indicator */}
-            <div className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-slate-800 border-2 border-slate-700 flex items-center justify-center">
-              <VideoOff className="w-4 h-4 text-muted-foreground" />
-            </div>
-          </motion.div>
-
-          <motion.p
-            initial={{ y: 10, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.1 }}
-            className="text-lg font-semibold text-white mt-4"
-          >
+          {/* Avatar */}
+          <div className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center shadow-xl">
+            <span className="text-2xl sm:text-3xl md:text-4xl font-bold text-white">
+              {participant.name.charAt(0).toUpperCase()}
+            </span>
+          </div>
+          <p className="text-sm sm:text-base font-medium text-white mt-3">
             {participant.name}
-          </motion.p>
-          <motion.p
-            initial={{ y: 10, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.15 }}
-            className="text-xs text-muted-foreground"
-          >
-            Camera off
-          </motion.p>
+          </p>
+          <div className="flex items-center gap-1.5 mt-1.5 text-neutral-400">
+            <VideoOff className="w-3.5 h-3.5" />
+            <span className="text-xs">Camera off</span>
+          </div>
         </div>
       )}
 
-      {/* Top Bar with Controls */}
-      <div className="absolute top-0 left-0 right-0 p-3 bg-gradient-to-b from-black/60 to-transparent flex items-center justify-between z-10">
-        <div className="flex items-center gap-2">
-          <div
-            className={cn(
-              "px-2.5 py-1 rounded-full backdrop-blur-md flex items-center gap-1.5",
-              participant.isMuted ? "bg-destructive/80" : "bg-black/40"
-            )}
-          >
-            {participant.isMuted ? (
-              <MicOff className="w-3 h-3 text-white" />
-            ) : (
-              <Mic className="w-3 h-3 text-white" />
-            )}
-            <span className="text-xs font-medium text-white">
-              {participant.name}
-              {isLocal && " (You)"}
-            </span>
-          </div>
-          {isSpeaking && (
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              className="flex gap-0.5"
-            >
-              {[0, 1, 2].map((i) => (
-                <motion.div
-                  key={i}
-                  animate={{
-                    height: ["4px", "12px", "4px"],
-                  }}
-                  transition={{
-                    duration: 0.5,
-                    repeat: Infinity,
-                    delay: i * 0.1,
-                  }}
-                  className="w-0.5 bg-primary rounded-full"
-                />
-              ))}
-            </motion.div>
+      {/* Name Badge - Bottom Left */}
+      <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between z-10">
+        <div
+          className={cn(
+            "flex items-center gap-1.5 px-2.5 py-1 rounded-full backdrop-blur-md text-xs font-medium",
+            participant.isMuted
+              ? "bg-red-500/80 text-white"
+              : "bg-black/50 text-white"
           )}
+        >
+          {participant.isMuted ? (
+            <MicOff className="w-3 h-3" />
+          ) : (
+            <Mic className="w-3 h-3" />
+          )}
+          <span className="truncate max-w-[100px] sm:max-w-[150px]">
+            {participant.name}
+            {isLocal && " (You)"}
+          </span>
         </div>
 
-        {onPin && (
-          <button
-            onClick={onPin}
-            className={cn(
-              "p-1.5 rounded-lg backdrop-blur-md transition-all hover:scale-110",
-              isPinned
-                ? "bg-primary/80 text-white"
-                : "bg-black/40 text-white/70 hover:text-white"
-            )}
+        {/* Speaking indicator */}
+        {isSpeaking && (
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            className="flex gap-0.5 items-end h-4"
           >
-            <Pin className="w-3.5 h-3.5" />
-          </button>
+            {[0, 1, 2].map((i) => (
+              <motion.div
+                key={i}
+                animate={{
+                  height: ["4px", "12px", "4px"],
+                }}
+                transition={{
+                  duration: 0.4,
+                  repeat: Infinity,
+                  delay: i * 0.1,
+                }}
+                className="w-1 bg-green-500 rounded-full"
+              />
+            ))}
+          </motion.div>
         )}
-      </div>
-
-      {/* Connection Quality Indicator - Mocked for now since we don't have stats yet */}
-      <div className="absolute top-3 right-3 flex gap-0.5">
-        {[...Array(3)].map((_, i) => (
-          <div
-            key={i}
-            className={cn(
-              "w-1 rounded-full transition-all",
-              i === 0 ? "h-2" : i === 1 ? "h-3" : "h-4",
-              "bg-green-500"
-            )}
-          />
-        ))}
       </div>
     </motion.div>
   );

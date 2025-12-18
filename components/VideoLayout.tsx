@@ -13,8 +13,6 @@ interface VideoLayoutProps {
   activeSpeaker: VideoParticipant | null;
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
-  pinnedParticipant?: string;
-  onPinParticipant?: (identity: string) => void;
 }
 
 export const VideoLayout = ({
@@ -23,88 +21,86 @@ export const VideoLayout = ({
   activeSpeaker,
   viewMode,
   onViewModeChange,
-  pinnedParticipant,
-  onPinParticipant,
 }: VideoLayoutProps) => {
-  const totalParticipants =
-    remoteParticipants.length + (localParticipant ? 1 : 0);
+  const allParticipants = [
+    ...(localParticipant ? [localParticipant] : []),
+    ...remoteParticipants,
+  ];
+  const totalParticipants = allParticipants.length;
 
-  const getGridCols = () => {
+  // Responsive grid columns
+  const getGridClasses = () => {
     if (totalParticipants === 1) return "grid-cols-1";
-    if (totalParticipants === 2) return "grid-cols-2";
+    if (totalParticipants === 2) return "grid-cols-1 sm:grid-cols-2";
     if (totalParticipants <= 4) return "grid-cols-2";
-    if (totalParticipants <= 6) return "grid-cols-3";
-    return "grid-cols-4";
+    if (totalParticipants <= 6) return "grid-cols-2 md:grid-cols-3";
+    return "grid-cols-2 md:grid-cols-3 lg:grid-cols-4";
   };
 
-  const renderGridView = () => {
-    const allParticipants = [
-      ...(localParticipant ? [localParticipant] : []),
-      ...remoteParticipants,
-    ];
-
-    return (
-      <div
-        className={cn("grid gap-3 w-full h-full auto-rows-fr", getGridCols())}
-      >
-        <AnimatePresence mode="popLayout">
-          {allParticipants.map((participant) => (
+  const renderGridView = () => (
+    <div
+      className={cn(
+        "grid gap-2 sm:gap-3 w-full h-full p-1",
+        getGridClasses(),
+        // When single participant, center it
+        totalParticipants === 1 && "place-items-center",
+        // Auto rows that fill available space
+        "auto-rows-fr"
+      )}
+    >
+      <AnimatePresence mode="popLayout">
+        {allParticipants.map((participant) => (
+          <div
+            key={participant.id}
+            className={cn(
+              "w-full h-full min-h-0",
+              // For single participant, limit max size for better appearance
+              totalParticipants === 1 && "max-w-3xl max-h-[70vh]"
+            )}
+          >
             <VideoTile
-              key={participant.id}
               participant={participant}
               isLocal={localParticipant?.id === participant.id}
               isSpeaking={activeSpeaker?.id === participant.id}
-              isPinned={pinnedParticipant === participant.id}
-              onPin={
-                onPinParticipant
-                  ? () => onPinParticipant(participant.id)
-                  : undefined
-              }
             />
-          ))}
-        </AnimatePresence>
-      </div>
-    );
-  };
+          </div>
+        ))}
+      </AnimatePresence>
+    </div>
+  );
 
   const renderSpeakerView = () => {
-    if (!localParticipant && remoteParticipants.length === 0) return null;
+    if (totalParticipants === 0) return null;
 
     const speaker = activeSpeaker || localParticipant || remoteParticipants[0];
-    const otherParticipants = [
-      ...(localParticipant ? [localParticipant] : []),
-      ...remoteParticipants,
-    ].filter((p) => p.id !== speaker?.id);
+    const others = allParticipants.filter((p) => p.id !== speaker?.id);
 
     return (
-      <div className="flex gap-3 w-full h-full">
-        {/* Main Speaker View */}
-        <div className="flex-1 h-full">
+      <div className="flex flex-col md:flex-row gap-2 sm:gap-3 w-full h-full">
+        {/* Main Speaker */}
+        <div className="flex-1 min-h-0 min-w-0">
           {speaker && (
             <VideoTile
               participant={speaker}
               isLocal={speaker.id === localParticipant?.id}
               isSpeaking={true}
-              className="h-full"
             />
           )}
         </div>
 
-        {/* Sidebar with other participants */}
-        {otherParticipants.length > 0 && (
-          <div className="w-64 h-full flex flex-col gap-3 overflow-y-auto">
+        {/* Sidebar thumbnails */}
+        {others.length > 0 && (
+          <div className="flex md:flex-col gap-2 overflow-x-auto md:overflow-y-auto md:w-48 lg:w-56 shrink-0 pb-2 md:pb-0">
             <AnimatePresence mode="popLayout">
-              {otherParticipants.map((participant) => (
-                <div key={participant.id} className="aspect-video">
+              {others.map((participant) => (
+                <div
+                  key={participant.id}
+                  className="h-24 md:h-auto aspect-video shrink-0 md:shrink"
+                >
                   <VideoTile
                     participant={participant}
                     isLocal={participant.id === localParticipant?.id}
-                    isSpeaking={false}
-                    onPin={
-                      onPinParticipant
-                        ? () => onPinParticipant(participant.id)
-                        : undefined
-                    }
+                    isSpeaking={activeSpeaker?.id === participant.id}
                   />
                 </div>
               ))}
@@ -116,43 +112,29 @@ export const VideoLayout = ({
   };
 
   const renderSidebarView = () => {
-    if (!localParticipant && remoteParticipants.length === 0) return null;
+    if (totalParticipants === 0) return null;
 
-    const allParticipants = [
-      ...(localParticipant ? [localParticipant] : []),
-      ...remoteParticipants,
-    ];
-
-    const featured = pinnedParticipant
-      ? allParticipants.find((p) => p.id === pinnedParticipant) ||
-        localParticipant ||
-        remoteParticipants[0]
-      : localParticipant || remoteParticipants[0];
-
-    const otherParticipants = allParticipants.filter(
-      (p) => p.id !== featured?.id
-    );
+    const featured = localParticipant || remoteParticipants[0];
+    const others = allParticipants.filter((p) => p.id !== featured?.id);
 
     return (
-      <div className="flex flex-col gap-3 w-full h-full">
-        {/* Featured Participant */}
+      <div className="flex flex-col gap-2 sm:gap-3 w-full h-full">
+        {/* Featured participant */}
         <div className="flex-1 min-h-0">
           {featured && (
             <VideoTile
               participant={featured}
               isLocal={featured.id === localParticipant?.id}
               isSpeaking={activeSpeaker?.id === featured.id}
-              isPinned={true}
-              className="h-full"
             />
           )}
         </div>
 
-        {/* Bottom Bar with other participants */}
-        {otherParticipants.length > 0 && (
-          <div className="h-32 flex gap-3 overflow-x-auto pb-2">
+        {/* Bottom thumbnails */}
+        {others.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto h-24 sm:h-28 shrink-0 pb-1">
             <AnimatePresence mode="popLayout">
-              {otherParticipants.map((participant) => (
+              {others.map((participant) => (
                 <div
                   key={participant.id}
                   className="aspect-video h-full shrink-0"
@@ -161,11 +143,6 @@ export const VideoLayout = ({
                     participant={participant}
                     isLocal={participant.id === localParticipant?.id}
                     isSpeaking={activeSpeaker?.id === participant.id}
-                    onPin={
-                      onPinParticipant
-                        ? () => onPinParticipant(participant.id)
-                        : undefined
-                    }
                   />
                 </div>
               ))}
@@ -177,51 +154,34 @@ export const VideoLayout = ({
   };
 
   return (
-    <div className="flex flex-col gap-4 w-full h-full">
+    <div className="flex flex-col gap-3 w-full h-full">
       {/* View Mode Selector */}
-      <div className="flex items-center justify-center gap-2">
-        <div className="flex items-center gap-1 bg-card/90 backdrop-blur-xl px-2 py-1.5 rounded-full border border-border">
-          <button
-            onClick={() => onViewModeChange("grid")}
-            className={cn(
-              "p-2 rounded-full transition-all",
-              viewMode === "grid"
-                ? "bg-primary text-white"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted"
-            )}
-            title="Grid View"
-          >
-            <Grid3x3 className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => onViewModeChange("speaker")}
-            className={cn(
-              "p-2 rounded-full transition-all",
-              viewMode === "speaker"
-                ? "bg-primary text-white"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted"
-            )}
-            title="Speaker View"
-          >
-            <User className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => onViewModeChange("sidebar")}
-            className={cn(
-              "p-2 rounded-full transition-all",
-              viewMode === "sidebar"
-                ? "bg-primary text-white"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted"
-            )}
-            title="Sidebar View"
-          >
-            <LayoutGrid className="w-4 h-4" />
-          </button>
+      <div className="flex items-center justify-center shrink-0">
+        <div className="flex items-center gap-1 bg-neutral-800/80 backdrop-blur-xl px-1.5 py-1 rounded-full border border-neutral-700/50">
+          {[
+            { mode: "grid" as ViewMode, icon: Grid3x3, title: "Grid" },
+            { mode: "speaker" as ViewMode, icon: User, title: "Speaker" },
+            { mode: "sidebar" as ViewMode, icon: LayoutGrid, title: "Gallery" },
+          ].map(({ mode, icon: Icon, title }) => (
+            <button
+              key={mode}
+              onClick={() => onViewModeChange(mode)}
+              className={cn(
+                "p-2 rounded-full transition-all",
+                viewMode === mode
+                  ? "bg-blue-600 text-white"
+                  : "text-neutral-400 hover:text-white hover:bg-neutral-700"
+              )}
+              title={title}
+            >
+              <Icon className="w-4 h-4" />
+            </button>
+          ))}
         </div>
       </div>
 
       {/* Video Content */}
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-h-0 overflow-hidden">
         {viewMode === "grid" && renderGridView()}
         {viewMode === "speaker" && renderSpeakerView()}
         {viewMode === "sidebar" && renderSidebarView()}
