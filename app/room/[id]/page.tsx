@@ -126,7 +126,7 @@ export default function RoomPage() {
   }
 
   return (
-    <div className="flex h-[100dvh] bg-neutral-950 text-white overflow-hidden">
+    <div className="flex h-dvh bg-neutral-950 text-white overflow-hidden">
       {/* Main Content */}
       <div
         className={cn(

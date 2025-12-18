@@ -213,7 +213,7 @@ export function ChatSidebar({
                 ) : (
                   <div
                     className={cn(
-                      "px-3 py-2 rounded-2xl text-sm break-words",
+                      "px-3 py-2 rounded-2xl text-sm wrap-break-word",
                       isMe
                         ? "bg-blue-600 text-white rounded-br-sm"
                         : "bg-neutral-800 text-white rounded-bl-sm"
