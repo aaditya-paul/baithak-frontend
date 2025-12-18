@@ -258,12 +258,14 @@ export default function RoomPage() {
             animate={{ width: 320, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ type: "spring", damping: 30, stiffness: 300 }}
-            className="border-l border-neutral-800 bg-neutral-900/95 backdrop-blur-sm shadow-xl z-20 overflow-hidden"
+            className="h-full border-l border-neutral-800 bg-neutral-900/95 backdrop-blur-sm shadow-xl z-20 overflow-hidden"
           >
             {socket && (
               <ChatSidebar
                 roomId={roomId}
                 socket={socket}
+                isOpen={true}
+                localUserName={userName}
                 onClose={() => setIsChatOpen(false)}
               />
             )}
